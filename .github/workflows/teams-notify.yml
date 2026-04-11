@@ -1,0 +1,50 @@
+name: Teams Push Notification
+on: push
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Teams notification
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          GH_REPO: ${{ github.repository }}
+          GH_BRANCH: ${{ github.ref_name }}
+          GH_ACTOR: ${{ github.actor }}
+          GH_COMMIT_MSG: ${{ github.event.head_commit.message }}
+          GH_COMMIT_URL: ${{ github.event.head_commit.url }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          python3 << 'PYEOF'
+          import os, json, urllib.request
+          repo = os.environ.get("GH_REPO", "")
+          branch = os.environ.get("GH_BRANCH", "")
+          pusher = os.environ.get("GH_ACTOR", "")
+          commit_msg = os.environ.get("GH_COMMIT_MSG", "").replace('"', "\'")
+          commit_url = os.environ.get("GH_COMMIT_URL", "")
+          short_sha = os.environ.get("GH_SHA", "")[:7]
+          body = {
+            "type": "message",
+            "attachments": [{
+              "contentType": "application/vnd.microsoft.card.adaptive",
+              "content": {
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "type": "AdaptiveCard",
+                "version": "1.2",
+                "body": [
+                  {"type": "TextBlock", "text": f"\U0001f4e6 GitHub Push: **{repo}**", "size": "Medium", "weight": "Bolder"},
+                  {"type": "TextBlock", "text": f"Branch: `{branch}`  |  \U0001f464 {pusher}", "spacing": "None"},
+                  {"type": "TextBlock", "text": commit_msg, "wrap": True},
+                  {"type": "TextBlock", "text": f"Commit: [{short_sha}]({commit_url})", "spacing": "None"}
+                ]
+              }
+            }]
+          }
+          url = os.environ["TEAMS_WEBHOOK_URL"]
+          req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+          try:
+              with urllib.request.urlopen(req, timeout=10) as r:
+                  print(f"Teams OK: {r.status}")
+          except Exception as e:
+              print(f"Teams Error: {e}")
+          PYEOF
